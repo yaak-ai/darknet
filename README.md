@@ -9,9 +9,10 @@ export LD_LIBRARY_PATH=/usr/local/cuda-10.1/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_
 ### Process video
 
 To process a video and output results to a json file use:
+# sourced from [here](https://github.com/AlexeyAB/darknet/pull/3723/files)
 
 ```sh
-darknet detector demo cfg/coco.data cfg/yolov3.cfg yolov3.weights file.mp4 -dont_show -json_file_output results.json`
+darknet detector demo cfg/coco.data cfg/yolov3.cfg yolov3.weights file.mp4 -dont_show -json_file_output results.json
 ```
 
 ## (neural networks for object detection)

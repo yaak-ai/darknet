@@ -25,44 +25,40 @@ from ctypes import *
 import math
 import random
 import os
+import numpy as np
 
 
 class BOX(Structure):
-    _fields_ = [("x", c_float),
-                ("y", c_float),
-                ("w", c_float),
-                ("h", c_float)]
+    _fields_ = [("x", c_float), ("y", c_float), ("w", c_float), ("h", c_float)]
 
 
 class DETECTION(Structure):
-    _fields_ = [("bbox", BOX),
-                ("classes", c_int),
-                ("prob", POINTER(c_float)),
-                ("mask", POINTER(c_float)),
-                ("objectness", c_float),
-                ("sort_class", c_int),
-                ("uc", POINTER(c_float)),
-                ("points", c_int),
-                ("embeddings", POINTER(c_float)),
-                ("embedding_size", c_int),
-                ("sim", c_float),
-                ("track_id", c_int)]
+    _fields_ = [
+        ("bbox", BOX),
+        ("classes", c_int),
+        ("prob", POINTER(c_float)),
+        ("mask", POINTER(c_float)),
+        ("objectness", c_float),
+        ("sort_class", c_int),
+        ("uc", POINTER(c_float)),
+        ("points", c_int),
+        ("embeddings", POINTER(c_float)),
+        ("embedding_size", c_int),
+        ("sim", c_float),
+        ("track_id", c_int),
+    ]
+
 
 class DETNUMPAIR(Structure):
-    _fields_ = [("num", c_int),
-                ("dets", POINTER(DETECTION))]
+    _fields_ = [("num", c_int), ("dets", POINTER(DETECTION))]
 
 
 class IMAGE(Structure):
-    _fields_ = [("w", c_int),
-                ("h", c_int),
-                ("c", c_int),
-                ("data", POINTER(c_float))]
+    _fields_ = [("w", c_int), ("h", c_int), ("c", c_int), ("data", POINTER(c_float))]
 
 
 class METADATA(Structure):
-    _fields_ = [("classes", c_int),
-                ("names", POINTER(c_char_p))]
+    _fields_ = [("classes", c_int), ("names", POINTER(c_char_p))]
 
 
 def network_width(net):
@@ -91,10 +87,10 @@ def class_colors(names):
     Create a dict with one random BGR color for each
     class name
     """
-    return {name: (
-        random.randint(0, 255),
-        random.randint(0, 255),
-        random.randint(0, 255)) for name in names}
+    return {
+        name: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        for name in names
+    }
 
 
 def load_network(config_file, data_file, weights, batch_size=1):
@@ -110,8 +106,8 @@ def load_network(config_file, data_file, weights, batch_size=1):
         class_colors
     """
     network = load_net_custom(
-        config_file.encode("ascii"),
-        weights.encode("ascii"), 0, batch_size)
+        config_file.encode("ascii"), weights.encode("ascii"), 0, batch_size
+    )
     metadata = load_meta(data_file.encode("ascii"))
     class_names = [metadata.names[i].decode("ascii") for i in range(metadata.classes)]
     colors = class_colors(class_names)
@@ -123,19 +119,76 @@ def print_detections(detections, coordinates=False):
     for label, confidence, bbox in detections:
         x, y, w, h = bbox
         if coordinates:
-            print("{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})".format(label, confidence, x, y, w, h))
+            print(
+                "{}: {}%    (left_x: {:.0f}   top_y:  {:.0f}   width:   {:.0f}   height:  {:.0f})".format(
+                    label, confidence, x, y, w, h
+                )
+            )
         else:
             print("{}: {}%".format(label, confidence))
 
 
 def draw_boxes(detections, image, colors):
     import cv2
+
     for label, confidence, bbox in detections:
         left, top, right, bottom = bbox2points(bbox)
         cv2.rectangle(image, (left, top), (right, bottom), colors[label], 1)
-        cv2.putText(image, "{} [{:.2f}]".format(label, float(confidence)),
-                    (left, top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    colors[label], 2)
+        cv2.putText(
+            image,
+            "{} [{:.2f}]".format(label, float(confidence)),
+            (left, top - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            colors[label],
+            2,
+        )
+    return image
+
+
+def pixelate(image, blocks=3):
+    import cv2
+
+    # divide the input image into NxN blocks
+    (h, w) = image.shape[:2]
+    xSteps = np.linspace(0, w, blocks + 1, dtype="int")
+    ySteps = np.linspace(0, h, blocks + 1, dtype="int")
+    # loop over the blocks in both the x and y direction
+    for i in range(1, len(ySteps)):
+        for j in range(1, len(xSteps)):
+            # compute the starting and ending (x, y)-coordinates
+            # for the current block
+            startX = xSteps[j - 1]
+            startY = ySteps[i - 1]
+            endX = xSteps[j]
+            endY = ySteps[i]
+            # extract the ROI using NumPy array slicing, compute the
+            # mean of the ROI, and then draw a rectangle with the
+            # mean RGB values over the ROI in the original image
+            roi = image[startY:endY, startX:endX]
+            (B, G, R) = [int(x) for x in cv2.mean(roi)[:3]]
+            cv2.rectangle(image, (startX, startY), (endX, endY), (B, G, R), -1)
+    # return the pixelated blurred image
+    return image
+
+
+def redact_boxes(detections, image, colors):
+    import cv2
+
+    for label, confidence, bbox in detections:
+        left, top, right, bottom = bbox2points(bbox)
+        redact_cover = image[top:bottom, left:right, :]
+        cover = pixelate(redact_cover, blocks=4)
+        image[top:bottom, left:right, :] = cover
+        cv2.putText(
+            image,
+            "{} [{:.2f}]".format(label, float(confidence)),
+            (left, top - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            colors[label],
+            2,
+        )
     return image
 
 
@@ -161,14 +214,15 @@ def remove_negatives(detections, class_names, num):
     return predictions
 
 
-def detect_image(network, class_names, image, thresh=.5, hier_thresh=.5, nms=.45):
+def detect_image(network, class_names, image, thresh=0.5, hier_thresh=0.5, nms=0.45):
     """
-        Returns a list with highest confidence class and their bbox
+    Returns a list with highest confidence class and their bbox
     """
     pnum = pointer(c_int(0))
     predict_image(network, image)
-    detections = get_network_boxes(network, image.w, image.h,
-                                   thresh, hier_thresh, None, 0, pnum, 0)
+    detections = get_network_boxes(
+        network, image.w, image.h, thresh, hier_thresh, None, 0, pnum, 0
+    )
     num = pnum[0]
     if nms:
         do_nms_sort(detections, num, len(class_names), nms)
@@ -183,7 +237,7 @@ def detect_image(network, class_names, image, thresh=.5, hier_thresh=.5, nms=.45
 hasGPU = True
 if os.name == "nt":
     cwd = os.path.dirname(__file__)
-    os.environ['PATH'] = cwd + ';' + os.environ['PATH']
+    os.environ["PATH"] = cwd + ";" + os.environ["PATH"]
     winGPUdll = os.path.join(cwd, "yolo_cpp_dll.dll")
     winNoGPUdll = os.path.join(cwd, "yolo_cpp_dll_nogpu.dll")
     envKeys = list()
@@ -198,8 +252,8 @@ if os.name == "nt":
                 print("Flag value {} not forcing CPU mode".format(tmp))
         except KeyError:
             # We never set the flag
-            if 'CUDA_VISIBLE_DEVICES' in envKeys:
-                if int(os.environ['CUDA_VISIBLE_DEVICES']) < 0:
+            if "CUDA_VISIBLE_DEVICES" in envKeys:
+                if int(os.environ["CUDA_VISIBLE_DEVICES"]) < 0:
                     raise ValueError("ForceCPU")
             try:
                 global DARKNET_FORCE_CPU
@@ -218,18 +272,22 @@ if os.name == "nt":
         else:
             # Try the other way, in case no_gpu was compile but not renamed
             lib = CDLL(winGPUdll, RTLD_GLOBAL)
-            print("Environment variables indicated a CPU run, but we didn't find {}. Trying a GPU run anyway.".format(winNoGPUdll))
+            print(
+                "Environment variables indicated a CPU run, but we didn't find {}. Trying a GPU run anyway.".format(
+                    winNoGPUdll
+                )
+            )
 else:
-    lib = CDLL(os.path.join(
-        os.environ.get('DARKNET_PATH', './'),
-        "libdarknet.so"), RTLD_GLOBAL)
+    lib = CDLL(
+        os.path.join(os.environ.get("DARKNET_PATH", "./"), "libdarknet.so"), RTLD_GLOBAL
+    )
 lib.network_width.argtypes = [c_void_p]
 lib.network_width.restype = c_int
 lib.network_height.argtypes = [c_void_p]
 lib.network_height.restype = c_int
 
 copy_image_from_bytes = lib.copy_image_from_bytes
-copy_image_from_bytes.argtypes = [IMAGE,c_char_p]
+copy_image_from_bytes.argtypes = [IMAGE, c_char_p]
 
 predict = lib.network_predict_ptr
 predict.argtypes = [c_void_p, POINTER(c_float)]
@@ -246,7 +304,17 @@ make_image.argtypes = [c_int, c_int, c_int]
 make_image.restype = IMAGE
 
 get_network_boxes = lib.get_network_boxes
-get_network_boxes.argtypes = [c_void_p, c_int, c_int, c_float, c_float, POINTER(c_int), c_int, POINTER(c_int), c_int]
+get_network_boxes.argtypes = [
+    c_void_p,
+    c_int,
+    c_int,
+    c_float,
+    c_float,
+    POINTER(c_int),
+    c_int,
+    POINTER(c_int),
+    c_int,
+]
 get_network_boxes.restype = POINTER(DETECTION)
 
 make_network_boxes = lib.make_network_boxes
@@ -313,6 +381,16 @@ predict_image_letterbox.argtypes = [c_void_p, IMAGE]
 predict_image_letterbox.restype = POINTER(c_float)
 
 network_predict_batch = lib.network_predict_batch
-network_predict_batch.argtypes = [c_void_p, IMAGE, c_int, c_int, c_int,
-                                   c_float, c_float, POINTER(c_int), c_int, c_int]
+network_predict_batch.argtypes = [
+    c_void_p,
+    IMAGE,
+    c_int,
+    c_int,
+    c_int,
+    c_float,
+    c_float,
+    POINTER(c_int),
+    c_int,
+    c_int,
+]
 network_predict_batch.restype = POINTER(DETNUMPAIR)

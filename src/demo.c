@@ -107,13 +107,13 @@ void *detect_in_thread(void *ptr)
             dets = get_network_boxes(&net, get_width_mat(in_img), get_height_mat(in_img), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
         else
             dets = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
-        
+
         //const float nms = .45;
         //if (nms) {
         //    if (l.nms_kind == DEFAULT_NMS) do_nms_sort(dets, nboxes, l.classes, nms);
         //    else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         //}
-        
+
         custom_atomic_store_int(&run_detect_in_thread, 0);
     }
 
@@ -137,7 +137,7 @@ double get_wall_time()
 }
 
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, char *json_file_output, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     if (avgframes < 1) avgframes = 1;
@@ -153,6 +153,15 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     demo_thresh = thresh;
     demo_ext_output = ext_output;
     demo_json_port = json_port;
+
+    char *json_buf = NULL;
+    FILE* json_file = NULL;
+
+    if (json_file_output) {
+         json_file = fopen(json_file_output, "wb");
+         char *tmp = "[\n";
+         fwrite(tmp, sizeof(char), strlen(tmp), json_file);
+    }
     printf("Demo\n");
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
     if(weightfile){
@@ -283,6 +292,15 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 int timeout = 400000;
                 send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
             }
+            if (json_file_output) {
+                if (json_buf) {
+                  char *tmp = ", \n";
+                  fwrite(tmp, sizeof(char), strlen(tmp), json_file);
+                }
+                json_buf = detection_to_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, NULL);
+                fwrite(json_buf, sizeof(char), strlen(json_buf), json_file);
+                free(json_buf);
+            }
 
             //char *http_post_server = "webhook.site/898bbd9b-0ddd-49cf-b81d-1f56be98d870";
             if (http_post_host && !send_http_post_once) {
@@ -390,6 +408,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         printf("output_video_writer closed. \n");
     }
 
+    if (json_file_output) {
+        char *tmp = "\n]";
+        fwrite(tmp, sizeof(char), strlen(tmp), json_file);
+        fclose(json_file);
+    }
+
     this_thread_sleep_for(thread_wait_ms);
 
     custom_join(detect_thread, 0);
@@ -420,7 +444,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 }
 #else
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, char *json_file_output, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     fprintf(stderr, "Demo needs OpenCV for webcam images.\n");

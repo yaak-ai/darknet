@@ -345,6 +345,7 @@ void run_yolo(int argc, char **argv)
 	int mjpeg_port = find_int_arg(argc, argv, "-mjpeg_port", -1);
     int json_port = find_int_arg(argc, argv, "-json_port", -1);
 	char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
+  char *json_file_output = find_char_arg(argc, argv, "-json_file_output", 0);
     char *prefix = find_char_arg(argc, argv, "-prefix", 0);
     float thresh = find_float_arg(argc, argv, "-thresh", .2);
 	float hier_thresh = find_float_arg(argc, argv, "-hier", .5);
@@ -364,5 +365,5 @@ void run_yolo(int argc, char **argv)
     else if(0==strcmp(argv[2], "valid")) validate_yolo(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_yolo_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index, filename, voc_names, 20, 1, frame_skip,
-		prefix, out_filename, mjpeg_port, 0, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
+		prefix, out_filename, json_file_output, mjpeg_port, 0, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
 }

@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+
+  darknet-cpu:
+    build:
+      context: ../../
+      dockerfile: docker/darknet/Dockerfile.cpu
+    image: yaaktech/darknet-x86_64:latest-cpu
+    volumes:
+      - $HOME/.cache:/root/.cache
+
+  darknet-aarch64:
+    build:
+      context: ../../
+      dockerfile: docker/darknet/Dockerfile.aarch64
+    image: yaaktech/darknet-aarch64:latest-cpu
+    volumes:
+      - $HOME/.cache:/root/.cache
+
+  darknet-gpu:
+    build:
+      context: ../../
+      dockerfile: docker/darknet/Dockerfile.gpu
+    image: yaaktech/darknet-x86_64:latest-gpu
+    volumes:
+      - $HOME/.cache:/root/.cache
